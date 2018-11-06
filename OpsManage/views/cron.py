@@ -12,11 +12,12 @@ from OpsManage.models import Log_Cron_Config
 from django.contrib.auth.decorators import permission_required
 from OpsManage.utils.ansible_api_v2 import ANSRunner
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from dao.assets import AssetsSource
 
 @login_required()
 @permission_required('OpsManage.can_add_cron_config',login_url='/noperm/') 
 def cron_add(request):
-    serverList = Server_Assets.objects.all()
+    serverList = AssetsSource().serverList()
     if request.method == "GET": 
         return render(request,'cron/cron_add.html',{"user":request.user,"serverList":serverList},
                                   )
@@ -55,8 +56,8 @@ def cron_add(request):
         if  int(cron_status) == 1: 
             try:
                 sList = [server.ip]
-                if server.keyfile == 1:resource = [{"hostname": server.ip, "port": int(server.port),"username": server.username}] 
-                else:resource = [{"hostname": server.ip, "port": int(server.port),"username": server.username,"password": server.passwd}]              
+                if server.keyfile == 1:resource = [{"ip": server.ip, "port": int(server.port),"username": server.username}] 
+                else:resource = [{"ip": server.ip, "port": int(server.port),"username": server.username,"password": server.passwd}]              
                 ANS = ANSRunner(resource)
                 if cron.cron_script:
                     src = os.getcwd() + '/' + str(cron.cron_script)
@@ -78,7 +79,6 @@ def cron_add(request):
                                                                                                      )  
                 ANS.run_model(host_list=sList,module_name="cron",module_args=cron_args)   
                 result = ANS.handle_model_data(ANS.get_model_result(), 'cron',cron_args) 
-                print ANS.get_model_result()
             except Exception,e:
                 return render(request,'cron/cron_add.html',{"user":request.user,
                                                                    "serverList":serverList,
@@ -92,9 +92,8 @@ def cron_add(request):
         return HttpResponseRedirect('/cron_add')
 
 @login_required()
-@permission_required('OpsManage.can_read_config',login_url='/noperm/') 
+@permission_required('OpsManage.can_read_cron_config',login_url='/noperm/') 
 def cron_list(request,page):
-#     cronList = Cron_Config.objects.select_related().all()
     allCronList = Cron_Config.objects.select_related().all()[0:1000]
     paginator = Paginator(allCronList, 25)          
     try:
@@ -134,7 +133,6 @@ def cron_mod(request,cid):
                        cron_script_path=request.POST.get('cron_script_path',None),
                        cron_status=request.POST.get('cron_status'),
                                        )
-            print request.POST.get('cron_command')
             recordCron.delay(cron_user=str(request.user),cron_id=cid,cron_name=cron.cron_name,cron_content="修改计划任务",cron_server=cron.cron_server.ip)
         except Exception,e:
             return render(request,'cron/cron_modf.html',
@@ -142,8 +140,8 @@ def cron_mod(request,cid):
                                   )  
         try:
             sList = [cron.cron_server.ip]
-            if cron.cron_server.keyfile == 1:resource = [{"hostname": cron.cron_server.ip, "port": int(cron.cron_server.port),"username": cron.cron_server.username}] 
-            else:resource = [{"hostname": cron.cron_server.ip, "port": int(cron.cron_server.port),
+            if cron.cron_server.keyfile == 1:resource = [{"ip": cron.cron_server.ip, "port": int(cron.cron_server.port),"username": cron.cron_server.username}] 
+            else:resource = [{"ip": cron.cron_server.ip, "port": int(cron.cron_server.port),
                          "username": cron.cron_server.username,"password": cron.cron_server.passwd}]    
             cron = Cron_Config.objects.get(id=cid)
             if request.FILES.get('cron_script'):
@@ -168,12 +166,12 @@ def cron_mod(request,cid):
                                   )                     
         return HttpResponseRedirect('/cron_mod/{id}/'.format(id=cid))
     
-    elif request.method == "DELETE":      
+    elif request.method == "DELETE" and request.user.has_perm('OpsManage.can_delete_cron_config'):     
         try:
             recordCron.delay(cron_user=str(request.user),cron_id=cid,cron_name=cron.cron_name,cron_content="删除计划任务",cron_server=cron.cron_server.ip)
             sList = [cron.cron_server.ip]
-            if cron.cron_server.keyfile == 1:resource = [{"hostname": cron.cron_server.ip, "port": int(cron.cron_server.port),"username": cron.cron_server.username}] 
-            else:resource = [{"hostname": cron.cron_server.ip, "port": int(cron.cron_server.port),
+            if cron.cron_server.keyfile == 1:resource = [{"ip": cron.cron_server.ip, "port": int(cron.cron_server.port),"username": cron.cron_server.username}] 
+            else:resource = [{"ip": cron.cron_server.ip, "port": int(cron.cron_server.port),
                          "username": cron.cron_server.username,"password": cron.cron_server.passwd}]    
             ANS = ANSRunner(resource)  
             ANS.run_model(host_list=sList,module_name="cron",module_args="""name={name} state=absent""".format(name=cron.cron_name))    
@@ -219,8 +217,8 @@ def cron_config(request):
                     recordCron.delay(cron_user=str(request.user),cron_id=cron.id,cron_name=cron.cron_name,cron_content="导入计划任务",cron_server=server.ip)
                     if  int(cron.cron_status) == 1: 
                         sList = [server.ip]
-                        if server.keyfile == 1:resource = [{"hostname": server.ip, "port": int(server.port),"username": server.username}] 
-                        else:resource = [{"hostname": server.ip, "port": int(server.port),"username": server.username,"password": server.passwd}]                
+                        if server.keyfile == 1:resource = [{"ip": server.ip, "port": int(server.port),"username": server.username}] 
+                        else:resource = [{"ip": server.ip, "port": int(server.port),"username": server.username,"password": server.passwd}]                
                         ANS = ANSRunner(resource)
                         ANS.run_model(host_list=sList,module_name="cron",module_args="""name={name} minute='{minute}' hour='{hour}' day='{day}'
                                                                                      weekday='{weekday}' month='{month}' user='{user}' job='{job}'""".format(name=cron.cron_name,minute=cron.cron_minute,
@@ -247,5 +245,4 @@ def cron_log(request,page):
             cronList = paginator.page(1)
         except EmptyPage:
             cronList = paginator.page(paginator.num_pages)          
-        return render(request,'cron/cron_log.html',{"user":request.user,"cronList":cronList},
-                                  )
+        return render(request,'cron/cron_log.html',{"user":request.user,"cronList":cronList},)
